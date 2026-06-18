@@ -78,6 +78,7 @@ td{padding:12px 14px;font-size:13px;border-bottom:1px solid #f5f5f5;}
 <div class="nav">
   <a href="/dashboard.php">📋 Réclamations</a>
   <a href="/statistiques.php" class="active">📊 Statistiques</a>
+  <a href="/compte.php">🔑 Mon compte</a>
 </div>
 <div class="container">
   <div class="kpi-grid">

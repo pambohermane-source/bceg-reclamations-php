@@ -19,7 +19,12 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action      = $_POST['action'] ?? '';
     $commentaire = trim($_POST['commentaire'] ?? '');
-    $nouveauStatut = $action === 'traiter' ? 'En traitement' : ($action === 'cloturer' ? 'Cloturee' : ($action === 'rejeter' ? 'Rejetee' : $rec['statut']));
+
+    // action -> statut + libelle lisible pour l'historique
+    $mapStatut = ['traiter'=>'En traitement','resoudre'=>'Resolue','cloturer'=>'Cloturee','rejeter'=>'Rejetee'];
+    $mapLibelle = ['traiter'=>'Mise en traitement','resoudre'=>'Marquée résolue','cloturer'=>'Clôturée','rejeter'=>'Rejetée'];
+    $nouveauStatut = $mapStatut[$action] ?? $rec['statut'];
+    $libelle = $mapLibelle[$action] ?? $action;
 
     $fichierNom = null; $fichierPath = null;
     if (!empty($_FILES['fichier']['name'])) {
@@ -30,13 +35,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             move_uploaded_file($_FILES['fichier']['tmp_name'], $fichierPath);
         }
     }
-    $pdo->prepare("UPDATE reclamations SET statut=?, date_traitement=NOW() WHERE id=?")->execute([$nouveauStatut, $id]);
-    $pdo->prepare("INSERT INTO traitements (reclamation_id,utilisateur_id,action,commentaire,fichier_nom,fichier_path) VALUES (?,?,?,?,?,?)")->execute([$id,$user['id'],$action,$commentaire,$fichierNom,$fichierPath]);
+
+    // Met a jour la bonne date selon l'action (utile pour les statistiques / delai COBAC)
+    if (in_array($action, ['cloturer','rejeter'])) {
+        $pdo->prepare("UPDATE reclamations SET statut=?, date_cloture=NOW() WHERE id=?")->execute([$nouveauStatut, $id]);
+    } else {
+        $pdo->prepare("UPDATE reclamations SET statut=?, date_traitement=NOW() WHERE id=?")->execute([$nouveauStatut, $id]);
+    }
+    $pdo->prepare("INSERT INTO traitements (reclamation_id,utilisateur_id,action,commentaire,fichier_nom,fichier_path) VALUES (?,?,?,?,?,?)")->execute([$id,$user['id'],$libelle,$commentaire,$fichierNom,$fichierPath]);
     $rec['statut'] = $nouveauStatut;
     $message = 'Action enregistree avec succes.';
 }
 
 function badge($s){$c=['Nouvelle'=>['#DBEAFE','#1D4ED8'],'Affectee'=>['#FEF9C3','#7B5800'],'En traitement'=>['#FFF3CD','#856404'],'Resolue'=>['#DCFCE7','#166534'],'Cloturee'=>['#DCFCE7','#166534'],'Rejetee'=>['#FEE2E2','#991B1B']];$x=$c[$s]??['#F3F4F6','#374151'];return "<span style='background:{$x[0]};color:{$x[1]};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;'>$s</span>";}
+
+// ─── Contexte adapté selon le domaine de la réclamation ───
+$DOMAINES = [
+  'Comptabilite' => ['🧮','#2980b9', ['Vérifier la date de valeur et les agios contestés','Confirmer le montant et la période concernée','Joindre le relevé ou l\'avis d\'opéré']],
+  'Informatique' => ['💻','#16a085', ['Vérifier le paramétrage du compte / BCEGMobile','Confirmer l\'identifiant client concerné','Contrôler la disponibilité du service']],
+  'Engagements'  => ['📑','#8e44ad', ['Vérifier le dossier de crédit / la caution concernée','Confirmer l\'échéance ou les frais contestés','Contrôler le paramétrage du découvert']],
+  'Digital'      => ['📱','#c0622a', ['Vérifier l\'accès B-Online et le statut du compte','Confirmer l\'opération CVP / GIMAC et son montant','Contrôler le journal de la transaction']],
+  'Operations'   => ['🔄','#2c3e50', ['Vérifier la référence de l\'opération (virement, chèque, versement)','Confirmer montant, date et bénéficiaire','Contrôler un éventuel double débit']],
+  'Commercial'   => ['🤝','#27ae60', ['Identifier le gestionnaire et l\'agence concernée','Vérifier la demande (clôture, changement de gestionnaire)','Confirmer le délai annoncé au client']],
+  'Achats et Logistique' => ['📦','#d35400', ['Vérifier le bon de commande / la facture concernée','Confirmer le fournisseur et le montant','Contrôler l\'état de traitement']],
+  'Recouvrement et Juridique' => ['⚖️','#7f8c8d', ['Vérifier le dossier contentieux / la garantie','Confirmer le type d\'attestation demandée','Contrôler le solde et les trop-perçus']],
+  'Monetique'    => ['💳','#c0392b', ['Vérifier la référence carte / TPE / GAB','Confirmer montant et date du paiement contesté','Contrôler si l\'opération est comptabilisée']],
+];
+$dom = $rec['departement_assigne'] ?? '';
+$ctx = $DOMAINES[$dom] ?? ['📋','#4d553d', ['Réclamation non encore affectée à un domaine.','Le CEC doit l\'affecter pour orienter le traitement.']];
+$ctxIco = $ctx[0]; $ctxColor = $ctx[1]; $ctxChecks = $ctx[2];
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -73,6 +100,15 @@ textarea:focus{outline:none;border-color:#4d553d;}
 .btn-bleu{background:#2980b9;color:white;}
 .btn-rouge{background:#e74c3c;color:white;}
 .success-msg{background:#e8ede8;color:#4d553d;padding:12px 16px;border-radius:10px;margin-bottom:16px;font-size:13px;font-weight:600;}
+/* Bandeau domaine (adapté) */
+.dom-banner{display:flex;align-items:center;gap:14px;border-radius:14px;padding:16px 20px;margin-bottom:16px;color:#fff;}
+.dom-banner .ico{width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}
+.dom-banner .t{font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;opacity:.85;}
+.dom-banner .n{font-size:18px;font-weight:800;margin-top:1px;}
+.checks{list-style:none;padding:0;margin:0;}
+.checks li{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:#444;padding:7px 0;border-bottom:1px dashed #eee;}
+.checks li:last-child{border-bottom:none;}
+.checks li::before{content:'✓';color:#fff;background:var(--dc);min-width:18px;height:18px;border-radius:50%;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;}
 </style>
 </head>
 <body>
@@ -84,6 +120,15 @@ textarea:focus{outline:none;border-color:#4d553d;}
 <div class="container">
   <?php if ($message): ?><div class="success-msg">✅ <?= htmlspecialchars($message) ?></div><?php endif; ?>
 
+  <!-- Bandeau adapté au domaine -->
+  <div class="dom-banner" style="background:linear-gradient(135deg,<?= $ctxColor ?>,<?= $ctxColor ?>cc);">
+    <div class="ico"><?= $ctxIco ?></div>
+    <div>
+      <div class="t">Domaine</div>
+      <div class="n"><?= htmlspecialchars($dom ?: 'Non affecté') ?></div>
+    </div>
+  </div>
+
   <div class="grid2">
     <div class="card">
       <h3 style="font-size:15px;font-weight:800;color:#4d553d;margin-bottom:16px;">👤 Client</h3>
@@ -94,7 +139,7 @@ textarea:focus{outline:none;border-color:#4d553d;}
     </div>
     <div class="card">
       <h3 style="font-size:15px;font-weight:800;color:#4d553d;margin-bottom:16px;">📋 Réclamation</h3>
-      <div class="field"><label>Catégorie</label><div class="val"><?= htmlspecialchars($rec['categorie']) ?></div></div>
+      <div class="field"><label>Motif</label><div class="val"><?= htmlspecialchars($rec['categorie']) ?></div></div>
       <div class="field"><label>Agence</label><div class="val"><?= htmlspecialchars($rec['agence']?:'—') ?></div></div>
       <div class="field"><label>Département assigné</label><div class="val"><?= htmlspecialchars($rec['departement_assigne']?:'Non affecté') ?></div></div>
       <div class="field"><label>Date de réception</label><div class="val"><?= date('d/m/Y H:i', strtotime($rec['date_reception'])) ?></div></div>
@@ -104,6 +149,16 @@ textarea:focus{outline:none;border-color:#4d553d;}
   <div class="card">
     <h3 style="font-size:15px;font-weight:800;color:#4d553d;margin-bottom:12px;">📝 Description</h3>
     <p style="font-size:14px;color:#555;line-height:1.7;"><?= nl2br(htmlspecialchars($rec['description'])) ?></p>
+  </div>
+
+  <!-- Points à vérifier (adaptés au domaine) -->
+  <div class="card" style="--dc:<?= $ctxColor ?>;">
+    <h3 style="font-size:15px;font-weight:800;color:<?= $ctxColor ?>;margin-bottom:14px;"><?= $ctxIco ?> Points à vérifier — <?= htmlspecialchars($dom ?: 'à affecter') ?></h3>
+    <ul class="checks">
+      <?php foreach($ctxChecks as $chk): ?>
+      <li><?= htmlspecialchars($chk) ?></li>
+      <?php endforeach; ?>
+    </ul>
   </div>
 
   <!-- ACTIONS -->

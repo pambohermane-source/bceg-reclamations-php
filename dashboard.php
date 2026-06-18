@@ -99,6 +99,7 @@ tr:hover td{background:#fafafa;}
   <a href="/dashboard.php" class="active">📋 Réclamations</a>
   <?php if (in_array($role, ['qualite','direction'])): ?><a href="/statistiques.php">📊 Statistiques</a><?php endif; ?>
   <a href="/depot.php" target="_blank">⚠️ Formulaire client</a>
+  <a href="/compte.php">🔑 Mon compte</a>
 </div>
 <div class="container">
 
@@ -147,7 +148,7 @@ tr:hover td{background:#fafafa;}
           <td><?= date('d/m/Y', strtotime($r['date_reception'])) ?></td>
           <td style="white-space:nowrap;">
             <a href="/reclamation.php?id=<?= $r['id'] ?>" class="btn-sm btn-voir">Voir</a>
-            <?php if ($role === 'cec' && $r['statut'] === 'Nouvelle'): ?>
+            <?php if (in_array($role, ['cec','qualite']) && $r['statut'] === 'Nouvelle'): ?>
             <button class="btn-sm btn-affecter" onclick="affecterModal(<?= $r['id'] ?>, '<?= htmlspecialchars($r['numero_suivi']) ?>')">Affecter</button>
             <?php endif; ?>
             <?php if ($role === 'departement' && in_array($r['statut'], ['Affectee','En traitement'])): ?>
@@ -166,7 +167,7 @@ tr:hover td{background:#fafafa;}
   </div>
 </div>
 
-<?php if ($role === 'cec'): ?>
+<?php if (in_array($role, ['cec','qualite'])): ?>
 <!-- Modal Affectation -->
 <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;">
   <div style="background:white;border-radius:16px;padding:28px;width:100%;max-width:400px;margin:20px;">
